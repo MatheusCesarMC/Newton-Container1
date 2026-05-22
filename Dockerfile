@@ -1,22 +1,22 @@
 # ============================================================
-# V2 — Segurança básica (single-stage)
-# Melhorias: versão fixada, usuário não-root, healthcheck
+# V3 — Multistage build (sem otimização de segurança ainda)
+# Conceito: separar ambiente de build do ambiente de produção
+#
+# Por que multistage?
+#   • A imagem final não carrega Node.js, npm, nem código-fonte
+#   • Resultado: imagem menor, superfície de ataque reduzida
 # ============================================================
 
-FROM nginx:1.27-alpine
+# ── Stage 1: Build ──────────────────────────────────────────
+# Em projetos reais: npm install + npm run build (React, Vue…)
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY src/ .
 
-# Cria usuário sem privilégios de root
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup \
-    && chown -R appuser:appgroup /usr/share/nginx/html
+# ── Stage 2: Production ─────────────────────────────────────
+# Apenas o Nginx + os arquivos compilados — sem Node.js
+FROM nginx:1.27-alpine AS production
 
-COPY src/index.html /usr/share/nginx/html/index.html
-COPY nginx.conf     /etc/nginx/nginx.conf
+COPY --from=builder /app /usr/share/nginx/html
 
-# Troca do usuário root para o não-privilegiado
-USER appuser
-
-EXPOSE 8080
-
-# Verifica se o servidor responde a cada 30 segundos
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-    CMD wget -qO- http://localhost:8080 || exit 1
+EXPOSE 80
